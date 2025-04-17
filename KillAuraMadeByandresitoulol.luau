@@ -1,34 +1,20 @@
---// SERVICIOS
-local HttpService = game:GetService("HttpService")
+-- ⚔️ Configuración inicial
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 
---// LISTA DE MOBS ACTUALIZADA
-local listaDeMobs = {
-	"Aevrul", "Baby Scarab", "Baby Shroom", "Baby Slime", "Baby Yeti", "Baby Yeti Tribute",
-	"Bamboo Mage", "Bandit", "Bandit Skirmisher", "Battering Shroom", "Batty", "Bear",
-	"Big Slime", "Birthday Mage", "Boar", "Book", "Bushi", "Chad", "Chicken", "Crabby",
-	"Crow", "Cultist", "Dark Cleric", "Deathsting", "Dragon Boss", "Dragon Monk", "Dummy",
-	"Dustwurm", "Eldering Shroom", "Elder Shroom", "Enchanted Slime", "Enchiridion",
-	"Ent Sapling", "Ethera", "Ethereal Monarch", "Frightcrow", "Fish", "First Mate",
-	"Fly Trap", "Gauntlet Gate", "Gecko", "Goblin", "Gorgog Guardian", "Guardian",
-	"Guardian Dummy", "Hag", "Hermit Crabby", "Hitbox", "Hog", "Horseshoe Crab", "Humanoid",
-	"Jellyfish", "Kobra", "Lil Shroomie Cage", "Lobster", "Lost Spirit", "Mama Hermit Crabby",
-	"Master Miyamoto", "Mimic Jester", "Miner Prisoner", "Mo Ko Tu Aa", "Mogloko", "Moglo",
-	"Monster", "Mosquito Parasite", "Mummy", "Orc", "Parasite", "Parasite Host",
-	"Pirate", "Pirate Captain", "Pirate Summon", "Pit Ratty", "Possum the Devourer",
-	"Prisoner", "Ram", "Ratty", "Reanimated Slime", "Reaper", "Redwood Bandit",
-	"Redwood Bandit Leader", "Rock Slime", "Rootbeard", "Rubee", "Runic Titan",
-	"Samurai", "Scarab", "Scarecrow", "Sensei", "Shade", "Shaman", "Shinobi", "Shroom",
-	"Skeleton", "Skull Boss", "Slime", "Snel", "Soulcage", "Spider", "Spider Queen",
-	"Spiderling", "Stingtail", "Sunken Savage", "Terror of the Deep", "The Yeti",
-	"Toni", "Tortoise", "Treemuk", "Tribute Gate", "Trickster Spirit", "Tumbleweed",
-	"Undead", "Wisp", "Ronin"
-}
+-- 🧠 Variables de habilidad
+local habilidadData = workspace:WaitForChild("abilityData"):WaitForChild(LocalPlayer.Name)
+local activeData = habilidadData:WaitForChild("activeAbilityExecutionData")
+local abilityGUIDValue = activeData:WaitForChild("abilityGUID")
 
---// BASE DE DATOS DE HABILIDADES
-local abilityData = {
+local cachedGUID = nil
+local cachedID = nil
+
+-- 📦 IDs y RemoteNames válidos
+local habilidades = {
     -- Starter Abilities
     ["Rock Throw"] = {ID = 34, RemoteNames = {"rock-hit"}},
     ["Magic Missile"] = {ID = 1, RemoteNames = {"strike"}},
@@ -107,119 +93,100 @@ local abilityData = {
     ["Ricochet"] = {ID = 31, RemoteNames = {"initial", "bounce"}},
 }
 
---// FUNCIONES DE UTILIDAD
-local function isValidGUID(guid)
-	return typeof(guid) == "string" and #guid == 36 and string.match(guid, "^%x+%-%x+%-%x+%-%x+%-%x+$") ~= nil
+-- 🧠 Lista de mobs del mapa
+local listaDeMobs = {
+    "Aevrul", "Baby Scarab", "Baby Shroom", "Baby Slime", "Baby Yeti", "Baby Yeti Tribute",
+    "Bamboo Mage", "Bandit", "Bandit Skirmisher", "Battering Shroom", "Batty", "Bear",
+    "Big Slime", "Birthday Mage", "Boar", "Book", "Bushi", "Chad", "Chicken", "Crabby",
+    "Crow", "Cultist", "Dark Cleric", "Deathsting", "Dragon Boss", "Dragon Monk", "Dummy",
+    "Dustwurm", "Eldering Shroom", "Elder Shroom", "Enchanted Slime", "Enchiridion",
+    "Ent Sapling", "Ethera", "Ethereal Monarch", "Frightcrow", "Fish", "First Mate",
+    "Fly Trap", "Gauntlet Gate", "Gecko", "Goblin", "Gorgog Guardian", "Guardian",
+    "Guardian Dummy", "Hag", "Hermit Crabby", "Hitbox", "Hog", "Horseshoe Crab", "Humanoid",
+    "Jellyfish", "Kobra", "Lil Shroomie Cage", "Lobster", "Lost Spirit", "Mama Hermit Crabby",
+    "Master Miyamoto", "Mimic Jester", "Miner Prisoner", "Mo Ko Tu Aa", "Mogloko", "Moglo",
+    "Monster", "Mosquito Parasite", "Mummy", "Orc", "Parasite", "Parasite Host",
+    "Pirate", "Pirate Captain", "Pirate Summon", "Pit Ratty", "Possum the Devourer",
+    "Prisoner", "Ram", "Ratty", "Reanimated Slime", "Reaper", "Redwood Bandit",
+    "Redwood Bandit Leader", "Rock Slime", "Rootbeard", "Rubee", "Runic Titan",
+    "Samurai", "Scarab", "Scarecrow", "Sensei", "Shade", "Shaman", "Shinobi", "Shroom",
+    "Skeleton", "Skull Boss", "Slime", "Snel", "Soulcage", "Spider", "Spider Queen",
+    "Spiderling", "Stingtail", "Sunken Savage", "Terror of the Deep", "The Yeti",
+    "Toni", "Tortoise", "Treemuk", "Tribute Gate", "Trickster Spirit", "Tumbleweed",
+    "Undead", "Wisp", "Ronin"
+}
+
+-- 🧠 Buscar el ID que corresponde al GUID
+local function buscarIDDesdeGUID(guid)
+    for id, remoteNames in pairs(habilidades) do
+        for _, remoteName in ipairs(remoteNames) do
+            if guid:lower():find(remoteName:lower()) then
+                return id
+            end
+        end
+    end
+    return nil
 end
 
-local function isValidExecutionData(data)
-	return typeof(data) == "table" and data["id"] ~= 0 and isValidGUID(data["ability-guid"])
+-- 🔍 Obtener todos los mobs del mapa
+local function obtenerMobs()
+    local mobs = {}
+    for _, mobName in ipairs(listaDeMobs) do
+        local mobPart = workspace.placeFolders.entityManifestCollection:FindFirstChild(mobName)
+        if mobPart and mobPart:IsA("BasePart") then
+            table.insert(mobs, mobPart)
+        end
+    end
+    return mobs
 end
 
-local function getAbilityGUIDFromData(dataTable)
-	for _, data in pairs(dataTable) do
-		if isValidExecutionData(data) then
-			return data["ability-guid"], data["id"]
-		end
-	end
-	return nil, nil
-end
-
-local function getAbilityData()
-	local player = Players.LocalPlayer
-	local charModel = workspace.placeFolders.entityManifestCollection:FindFirstChild(player.Name)
-	if not charModel then return nil, nil end
-
-	local Hitbox = charModel:FindFirstChild("hitbox")
-	if not Hitbox then return nil, nil end
-
-	local ExecutionDataValue = Hitbox:FindFirstChild("activeAbilityExecutionData")
-	if not ExecutionDataValue or not ExecutionDataValue.Value then return nil, nil end
-
-	local success, parsed = pcall(function()
-		return HttpService:JSONDecode(ExecutionDataValue.Value)
-	end)
-	if not success or typeof(parsed) ~= "table" then return nil, nil end
-
-	if isValidExecutionData(parsed) then
-		return parsed["ability-guid"], parsed["id"]
-	end
-
-	return getAbilityGUIDFromData(parsed)
-end
-
-local function getRemoteNamesFromID(id)
-	return habilidades[id] or {}
-end
-
-local function obtenerMobsActuales()
-	local mobs = {}
-	for _, mobName in ipairs(listaDeMobs) do
-		local mobPart = workspace.placeFolders.entityManifestCollection:FindFirstChild(mobName)
-		if mobPart and mobPart:IsA("BasePart") then
-			table.insert(mobs, mobPart)
-		end
-	end
-	return mobs
-end
-
---// VARIABLES CACHEADAS
-local cachedGUID = nil
-local cachedID = nil
-local cachedMobs = {}
-
---// ACTUALIZAR GUID e ID CADA 0.1s
+-- 🔄 Loop principal de ataque
 task.spawn(function()
-	while true do
-		local nuevoGUID, nuevoID = getAbilityData()
-		if nuevoGUID and nuevoGUID ~= cachedGUID then
-			cachedGUID = nuevoGUID
-			cachedID = nuevoID
-		end
-		task.wait(0.1)
-	end
-end)
+    while true do
+        local currentGUID = abilityGUIDValue.Value
+        if currentGUID ~= "" and currentGUID ~= cachedGUID then
+            cachedGUID = currentGUID
+            cachedID = buscarIDDesdeGUID(currentGUID)
+        end
 
---// ACTUALIZAR MOBS CADA 0.1s
-task.spawn(function()
-	while true do
-		cachedMobs = obtenerMobsActuales()
-		task.wait(0.1)
-	end
-end)
+        if cachedGUID and cachedID then
+            local remoteNames = habilidades[cachedID]
+            local remoteEvent = ReplicatedStorage:WaitForChild("network"):WaitForChild("RemoteEvent"):WaitForChild("playerRequest_damageEntity_batch")
+            local mobs = obtenerMobs()
 
---// ATAQUE AUTOMÁTICO CADA 0.1s
-task.spawn(function()
-	while true do
-		local remoteEvent = ReplicatedStorage:WaitForChild("network"):WaitForChild("RemoteEvent"):WaitForChild("playerRequest_damageEntity_batch")
+            if mobs and #mobs > 0 then
+                -- Procesar los mobs en lotes de 3
+                for i = 1, #mobs, 3 do
+                    local batch = {}
+                    local ataqueCount = 0
 
-		if cachedGUID and cachedID and #cachedMobs > 0 then
-			local remoteNames = getRemoteNamesFromID(cachedID)
+                    -- Crear ataques para el lote de 3 mobs
+                    for j = i, math.min(i + 2, #mobs) do
+                        local mob = mobs[j]
+                        if mob then
+                            for _, remoteName in ipairs(remoteNames) do
+                                for k = 1, 5 do -- 5 ataques por mob
+                                    table.insert(batch, {
+                                        mob,
+                                        mob.Position,
+                                        "ability",
+                                        cachedID,
+                                        remoteName,
+                                        cachedGUID
+                                    })
+                                end
+                            end
+                        end
+                    end
 
-			for _, mob in ipairs(cachedMobs) do
-				for _, remoteName in ipairs(remoteNames) do
-					local ataques = {}
+                    -- Enviar los ataques en batch
+                    if #batch > 0 then
+                        remoteEvent:FireServer(batch)
+                    end
+                end
+            end
+        end
 
-					for i = 1, 5 do
-						table.insert(ataques, {
-							mob,
-							mob.Position,
-							"ability",
-							cachedID,
-							remoteName,
-							cachedGUID
-						})
-					end
-
-					if remoteEvent then
-						remoteEvent:FireServer(ataques)
-					end
-
-					task.wait(0.01) -- delay pequeño por mob
-				end
-			end
-		end
-
-		task.wait(0.1)
-	end
+        task.wait(0.2) -- Intervalo de ataque
+    end
 end)
