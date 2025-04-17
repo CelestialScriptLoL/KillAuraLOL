@@ -24,7 +24,7 @@ local abilityData = {
     ["Barrage"] = {ID = 15, RemoteNames = {"arrow-1", "arrow-2", "arrow-3", "holo-direct", "holo-reflect", "jade-dot", "ghost-fire", "boom"}},  
     ["Shunpo"] = {ID = 13, RemoteNames = {"dash-through", "icicle", "icicle-bomb", "ghost-explode", "ghost-fire", "ghost-ring", "mumpo-hit", "mumpo-slice"}},  
 
-    -- Warlock  
+    -- Warlock (Mage Subclass)  
     ["Pillage Vitality"] = {ID = 40, RemoteNames = {"bolt", "fireworks"}},  
     ["Dark Pulse"] = {ID = 59, RemoteNames = {"pulse"}},  
     ["Desecrate"] = {ID = 64, RemoteNames = {"pulse"}},  
@@ -83,12 +83,9 @@ local abilityData = {
     ["Ricochet"] = {ID = 31, RemoteNames = {"initial", "bounce"}},
 }
 
---// LISTA DE MOBS (recortado por espacio)
-local listaDeMobs = {"Slime", "Spider", "Goblin", "Orc", "Skeleton", "Chicken"}
-
---// FUNCIONES DE UTILIDAD
+--// FUNCIONES
 local function isValidGUID(guid)
-    return typeof(guid) == "string" and #guid == 36 and string.match(guid, "^%x+%-%x+%-%x+%-%x+%-%x+$") ~= nil
+    return typeof(guid) == "string" and #guid == 36 and guid:match("^%x+%-%x+%-%x+%-%x+%-%x+$") ~= nil
 end
 
 local function isValidExecutionData(data)
@@ -109,22 +106,21 @@ local function getAbilityGUIDAndID()
     local charModel = workspace.placeFolders.entityManifestCollection:FindFirstChild(player.Name)
     if not charModel then return nil end
 
-    local Hitbox = charModel:FindFirstChild("hitbox")  
-    if not Hitbox then return nil end  
+    local Hitbox = charModel:FindFirstChild("hitbox")
+    if not Hitbox then return nil end
 
-    local ExecutionDataValue = Hitbox:FindFirstChild("activeAbilityExecutionData")  
-    if not ExecutionDataValue or not ExecutionDataValue.Value then return nil end  
+    local ExecutionDataValue = Hitbox:FindFirstChild("activeAbilityExecutionData")
+    if not ExecutionDataValue or not ExecutionDataValue.Value then return nil end
 
-    local success, parsed = pcall(function()  
-        return HttpService:JSONDecode(ExecutionDataValue.Value)  
-    end)  
-    if not success or typeof(parsed) ~= "table" then  
-        return nil  
-    end  
+    local success, parsed = pcall(function()
+        return HttpService:JSONDecode(ExecutionDataValue.Value)
+    end)
 
-    if isValidExecutionData(parsed) then  
-        return parsed["ability-guid"], parsed["id"]  
-    end  
+    if not success then return nil end
+
+    if typeof(parsed) == "table" and isValidExecutionData(parsed) then
+        return parsed["ability-guid"], parsed["id"]
+    end
 
     return getAbilityGUIDFromData(parsed)
 end
@@ -137,65 +133,61 @@ local function getRemoteNamesFromID(id)
     end
 end
 
-local function obtenerMobsAgrupados()
-    local grupos = {}
-    for _, instancia in ipairs(workspace.placeFolders.entityManifestCollection:GetChildren()) do  
-        if instancia:IsA("BasePart") and table.find(listaDeMobs, instancia.Name) then  
-            grupos[instancia.Name] = grupos[instancia.Name] or {}  
-            table.insert(grupos[instancia.Name], instancia)  
-        end  
-    end  
-    return grupos
+local function obtenerPrimerMob()
+    for _, instancia in ipairs(workspace.placeFolders.entityManifestCollection:GetChildren()) do
+        if instancia:IsA("BasePart") then
+            return instancia
+        end
+    end
+    return nil
 end
 
 --// CACHE
 local cachedGUID, cachedID = nil, nil
 
---// ACTUALIZAR GUID/ID (mejorado)
+--// ACTUALIZAR GUID/ID
 task.spawn(function()
     while true do
         local nuevoGUID, nuevoID = getAbilityGUIDAndID()
-        if nuevoGUID and nuevoID and (nuevoGUID ~= cachedGUID or nuevoID ~= cachedID) then
+        if nuevoGUID and nuevoGUID ~= cachedGUID then
             cachedGUID = nuevoGUID
             cachedID = nuevoID
         end
-        task.wait(0.05)
+        task.wait(0.1)
     end
 end)
 
---// ATAQUE CON DELAY DE 0.1
+--// ATAQUE A UN SOLO MOB
 task.spawn(function()
     while true do
         local success, err = pcall(function()
             if cachedGUID and cachedID then
-                local gruposDeMobs = obtenerMobsAgrupados()
+                local mob = obtenerPrimerMob()
                 local remoteNames = getRemoteNamesFromID(cachedID)
                 local remoteEvent = ReplicatedStorage:WaitForChild("network"):WaitForChild("RemoteEvent"):WaitForChild("playerRequest_damageEntity_batch")
 
-                for _, grupo in pairs(gruposDeMobs) do
-                    for _, mob in ipairs(grupo) do
-                        for _, remoteName in ipairs(remoteNames) do
-                            local ataques = {}
-                            for i = 1, 5 do
-                                table.insert(ataques, {
-                                    mob,
-                                    mob.Position,
-                                    "ability",
-                                    cachedID,
-                                    remoteName,
-                                    cachedGUID
-                                })
-                            end
-                            remoteEvent:FireServer(ataques)
-                            task.wait(0.1) -- Delay más largo por mob
+                if mob and remoteNames then
+                    for _, remoteName in ipairs(remoteNames) do
+                        local ataques = {}
+                        for _ = 1, 5 do
+                            table.insert(ataques, {
+                                mob,
+                                mob.Position,
+                                "ability",
+                                cachedID,
+                                remoteName,
+                                cachedGUID
+                            })
                         end
+                        remoteEvent:FireServer(ataques)
+                        task.wait(0.1)
                     end
                 end
             end
         end)
 
         if not success then
-            warn("Error en autofarm:", err)
+            warn("Error en ataque:", err)
         end
 
         task.wait(0.1)
