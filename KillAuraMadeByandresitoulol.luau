@@ -7,7 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local abilityData = {
     -- Starter Abilities
     ["Rock Throw"] = {ID = 34, RemoteNames = {"rock-hit"}},
-    ["Magic Missile"] = {ID = 1, RemoteNames = {"strike", "nightlight", "twilight", "capraBeam", "manaDetonation", "star", "laser", "ghost-explode", "ghost-fire", "mitosis-missile"}},
+    ["Magic Missile"] = {ID = 1, RemoteNames = {"strike"}},
 
     -- Mage  
     ["Mana Bomb"] = {ID = 4, RemoteNames = {"explosion1"}},  
