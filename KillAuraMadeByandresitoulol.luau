@@ -184,7 +184,7 @@ if nuevoGUID and nuevoGUID ~= cachedGUID then
 cachedGUID = nuevoGUID
 cachedID = nuevoID
 end
-task.wait(0.1)
+task.wait(0.5)
 end
 end)
 
