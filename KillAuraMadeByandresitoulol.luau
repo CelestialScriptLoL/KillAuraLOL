@@ -2,6 +2,30 @@
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+--// LISTA DE MOBS ACTUALIZADA
+local listaDeMobs = {
+	"Aevrul", "Baby Scarab", "Baby Shroom", "Baby Slime", "Baby Yeti", "Baby Yeti Tribute",
+	"Bamboo Mage", "Bandit", "Bandit Skirmisher", "Battering Shroom", "Batty", "Bear",
+	"Big Slime", "Birthday Mage", "Boar", "Book", "Bushi", "Chad", "Chicken", "Crabby",
+	"Crow", "Cultist", "Dark Cleric", "Deathsting", "Dragon Boss", "Dragon Monk", "Dummy",
+	"Dustwurm", "Eldering Shroom", "Elder Shroom", "Enchanted Slime", "Enchiridion",
+	"Ent Sapling", "Ethera", "Ethereal Monarch", "Frightcrow", "Fish", "First Mate",
+	"Fly Trap", "Gauntlet Gate", "Gecko", "Goblin", "Gorgog Guardian", "Guardian",
+	"Guardian Dummy", "Hag", "Hermit Crabby", "Hitbox", "Hog", "Horseshoe Crab", "Humanoid",
+	"Jellyfish", "Kobra", "Lil Shroomie Cage", "Lobster", "Lost Spirit", "Mama Hermit Crabby",
+	"Master Miyamoto", "Mimic Jester", "Miner Prisoner", "Mo Ko Tu Aa", "Mogloko", "Moglo",
+	"Monster", "Mosquito Parasite", "Mummy", "Orc", "Parasite", "Parasite Host",
+	"Pirate", "Pirate Captain", "Pirate Summon", "Pit Ratty", "Possum the Devourer",
+	"Prisoner", "Ram", "Ratty", "Reanimated Slime", "Reaper", "Redwood Bandit",
+	"Redwood Bandit Leader", "Rock Slime", "Rootbeard", "Rubee", "Runic Titan",
+	"Samurai", "Scarab", "Scarecrow", "Sensei", "Shade", "Shaman", "Shinobi", "Shroom",
+	"Skeleton", "Skull Boss", "Slime", "Snel", "Soulcage", "Spider", "Spider Queen",
+	"Spiderling", "Stingtail", "Sunken Savage", "Terror of the Deep", "The Yeti",
+	"Toni", "Tortoise", "Treemuk", "Tribute Gate", "Trickster Spirit", "Tumbleweed",
+	"Undead", "Wisp", "Ronin"
+}
 
 --// BASE DE DATOS DE HABILIDADES
 local abilityData = {
@@ -83,113 +107,119 @@ local abilityData = {
     ["Ricochet"] = {ID = 31, RemoteNames = {"initial", "bounce"}},
 }
 
---// FUNCIONES
+--// FUNCIONES DE UTILIDAD
 local function isValidGUID(guid)
-    return typeof(guid) == "string" and #guid == 36 and guid:match("^%x+%-%x+%-%x+%-%x+%-%x+$") ~= nil
+	return typeof(guid) == "string" and #guid == 36 and string.match(guid, "^%x+%-%x+%-%x+%-%x+%-%x+$") ~= nil
 end
 
 local function isValidExecutionData(data)
-    return typeof(data) == "table" and data["id"] ~= 0 and isValidGUID(data["ability-guid"])
+	return typeof(data) == "table" and data["id"] ~= 0 and isValidGUID(data["ability-guid"])
 end
 
 local function getAbilityGUIDFromData(dataTable)
-    for _, data in pairs(dataTable) do
-        if isValidExecutionData(data) then
-            return data["ability-guid"], data["id"]
-        end
-    end
-    return nil, nil
+	for _, data in pairs(dataTable) do
+		if isValidExecutionData(data) then
+			return data["ability-guid"], data["id"]
+		end
+	end
+	return nil, nil
 end
 
-local function getAbilityGUIDAndID()
-    local player = Players.LocalPlayer
-    local charModel = workspace.placeFolders.entityManifestCollection:FindFirstChild(player.Name)
-    if not charModel then return nil end
+local function getAbilityData()
+	local player = Players.LocalPlayer
+	local charModel = workspace.placeFolders.entityManifestCollection:FindFirstChild(player.Name)
+	if not charModel then return nil, nil end
 
-    local Hitbox = charModel:FindFirstChild("hitbox")
-    if not Hitbox then return nil end
+	local Hitbox = charModel:FindFirstChild("hitbox")
+	if not Hitbox then return nil, nil end
 
-    local ExecutionDataValue = Hitbox:FindFirstChild("activeAbilityExecutionData")
-    if not ExecutionDataValue or not ExecutionDataValue.Value then return nil end
+	local ExecutionDataValue = Hitbox:FindFirstChild("activeAbilityExecutionData")
+	if not ExecutionDataValue or not ExecutionDataValue.Value then return nil, nil end
 
-    local success, parsed = pcall(function()
-        return HttpService:JSONDecode(ExecutionDataValue.Value)
-    end)
+	local success, parsed = pcall(function()
+		return HttpService:JSONDecode(ExecutionDataValue.Value)
+	end)
+	if not success or typeof(parsed) ~= "table" then return nil, nil end
 
-    if not success then return nil end
+	if isValidExecutionData(parsed) then
+		return parsed["ability-guid"], parsed["id"]
+	end
 
-    if typeof(parsed) == "table" and isValidExecutionData(parsed) then
-        return parsed["ability-guid"], parsed["id"]
-    end
-
-    return getAbilityGUIDFromData(parsed)
+	return getAbilityGUIDFromData(parsed)
 end
 
 local function getRemoteNamesFromID(id)
-    for _, data in pairs(abilityData) do
-        if data.ID == id then
-            return data.RemoteNames
-        end
-    end
+	return habilidades[id] or {}
 end
 
-local function obtenerPrimerMob()
-    for _, instancia in ipairs(workspace.placeFolders.entityManifestCollection:GetChildren()) do
-        if instancia:IsA("BasePart") then
-            return instancia
-        end
-    end
-    return nil
+local function obtenerMobsActuales()
+	local mobs = {}
+	for _, mobName in ipairs(listaDeMobs) do
+		local mobPart = workspace.placeFolders.entityManifestCollection:FindFirstChild(mobName)
+		if mobPart and mobPart:IsA("BasePart") then
+			table.insert(mobs, mobPart)
+		end
+	end
+	return mobs
 end
 
---// CACHE
-local cachedGUID, cachedID = nil, nil
+--// VARIABLES CACHEADAS
+local cachedGUID = nil
+local cachedID = nil
+local cachedMobs = {}
 
---// ACTUALIZAR GUID/ID
+--// ACTUALIZAR GUID e ID CADA 0.1s
 task.spawn(function()
-    while true do
-        local nuevoGUID, nuevoID = getAbilityGUIDAndID()
-        if nuevoGUID and nuevoGUID ~= cachedGUID then
-            cachedGUID = nuevoGUID
-            cachedID = nuevoID
-        end
-        task.wait(0.1)
-    end
+	while true do
+		local nuevoGUID, nuevoID = getAbilityData()
+		if nuevoGUID and nuevoGUID ~= cachedGUID then
+			cachedGUID = nuevoGUID
+			cachedID = nuevoID
+		end
+		task.wait(0.1)
+	end
 end)
 
---// ATAQUE A UN SOLO MOB
+--// ACTUALIZAR MOBS CADA 0.1s
 task.spawn(function()
-    while true do
-        local success, err = pcall(function()
-            if cachedGUID and cachedID then
-                local mob = obtenerPrimerMob()
-                local remoteNames = getRemoteNamesFromID(cachedID)
-                local remoteEvent = ReplicatedStorage:WaitForChild("network"):WaitForChild("RemoteEvent"):WaitForChild("playerRequest_damageEntity_batch")
+	while true do
+		cachedMobs = obtenerMobsActuales()
+		task.wait(0.1)
+	end
+end)
 
-                if mob and remoteNames then
-                    for _, remoteName in ipairs(remoteNames) do
-                        local ataques = {}
-                        for _ = 1, 5 do
-                            table.insert(ataques, {
-                                mob,
-                                mob.Position,
-                                "ability",
-                                cachedID,
-                                remoteName,
-                                cachedGUID
-                            })
-                        end
-                        remoteEvent:FireServer(ataques)
-                        task.wait(0.1)
-                    end
-                end
-            end
-        end)
+--// ATAQUE AUTOMÁTICO CADA 0.1s
+task.spawn(function()
+	while true do
+		local remoteEvent = ReplicatedStorage:WaitForChild("network"):WaitForChild("RemoteEvent"):WaitForChild("playerRequest_damageEntity_batch")
 
-        if not success then
-            warn("Error en ataque:", err)
-        end
+		if cachedGUID and cachedID and #cachedMobs > 0 then
+			local remoteNames = getRemoteNamesFromID(cachedID)
 
-        task.wait(0.1)
-    end
+			for _, mob in ipairs(cachedMobs) do
+				for _, remoteName in ipairs(remoteNames) do
+					local ataques = {}
+
+					for i = 1, 5 do
+						table.insert(ataques, {
+							mob,
+							mob.Position,
+							"ability",
+							cachedID,
+							remoteName,
+							cachedGUID
+						})
+					end
+
+					if remoteEvent then
+						remoteEvent:FireServer(ataques)
+					end
+
+					task.wait(0.01) -- delay pequeño por mob
+				end
+			end
+		end
+
+		task.wait(0.1)
+	end
 end)
