@@ -211,7 +211,6 @@ for mobName, grupo in pairs(gruposDeMobs) do
                             cachedGUID  
                         })  
                     end  
-
                     remoteEvent:FireServer(ataques)  
                 end  
             end  
@@ -220,7 +219,6 @@ for mobName, grupo in pairs(gruposDeMobs) do
 
     if not success then  
     end  
-
     task.wait(0.5)  
 end
 
