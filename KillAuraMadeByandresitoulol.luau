@@ -179,8 +179,9 @@ task.spawn(function()
                         end
                     end
 
-                    -- Enviar los ataques en batch
+                    -- Verificar si batch tiene ataques
                     if #batch > 0 then
+                        -- Enviar los ataques en batch
                         remoteEvent:FireServer(batch)
                     end
                 end
