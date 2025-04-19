@@ -2,7 +2,6 @@
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 
 --// BASE DE DATOS DE HABILIDADES
 local abilityData = {
@@ -16,7 +15,7 @@ local abilityData = {
     ["Zap"] = {ID = 32, RemoteNames = {"bolt"}},
 
     -- Warrior
-    ["Spin Slash"] = {ID = 26, RemoteNames = {"uppercut"}},
+    ["Spin Slash"] = {ID = 55, RemoteNames = {"spin"}},
     ["Blasting Slash"] = {ID = 80, RemoteNames = {"aftershock-1", "aftershock-2", "aftershock-3", "tombSpike"}},
     ["Ground Slam"] = {ID = 5, RemoteNames = {"spike", "warlord", "warlord-outer", "divineSlam", "divineSlam-sword", "divineSlam-outer", "shockwave", "shockwave-outer", "slash", "aftershock", "agile-strike", "bee-attack", "ghost-fire", "ghost-explode", "ghost-ring"}},
 
@@ -84,7 +83,7 @@ local abilityData = {
     ["Ricochet"] = {ID = 31, RemoteNames = {"initial", "bounce"}},
 }
 
---// LISTA DE MOBS ACTUALIZADA
+--// LISTA DE MOBS
 local listaDeMobs = {
     "Aevrul", "Baby Scarab", "Baby Shroom", "Baby Slime", "Baby Yeti", "Baby Yeti Tribute",
     "Bamboo Mage", "Bandit", "Bandit Skirmisher", "Battering Shroom", "Batty", "Bear",
@@ -107,7 +106,7 @@ local listaDeMobs = {
     "Undead", "Wisp"
 }
 
---// FUNCIONES DE UTILIDAD PARA GUID E ID
+--// FUNCIONES DE UTILIDAD
 local function isValidGUID(guid)
     return typeof(guid) == "string" and #guid == 36 and string.match(guid, "^%x+%-%x+%-%x+%-%x+%-%x+$") ~= nil
 end
@@ -119,13 +118,13 @@ end
 local function getAbilityGUIDFromData(dataTable)
     for _, data in pairs(dataTable) do
         if isValidExecutionData(data) then
-            return data["ability-guid"], data["id"]
+            return data["id"]
         end
     end
-    return nil, nil
+    return nil
 end
 
-local function getAbilityGUIDAndID()
+local function getAbilityID()
     local player = Players.LocalPlayer
     local charModel = workspace.placeFolders.entityManifestCollection:FindFirstChild(player.Name)
     if not charModel then return nil end
@@ -144,7 +143,7 @@ local function getAbilityGUIDAndID()
     end
 
     if isValidExecutionData(parsed) then
-        return parsed["ability-guid"], parsed["id"]
+        return parsed["id"]
     end
 
     return getAbilityGUIDFromData(parsed)
@@ -158,85 +157,69 @@ local function getRemoteNamesFromID(id)
     end
 end
 
---// FUNCION PARA DETECTAR MOBS PRESENTES EN EL MAPA
-local function obtenerMobsActuales()
-    local mobs = {}
-    for _, mobName in ipairs(listaDeMobs) do
-        local mobPart = workspace.placeFolders.entityManifestCollection:FindFirstChild(mobName)
-        if mobPart and mobPart:IsA("BasePart") then
-            table.insert(mobs, mobPart)
+--// FUNCION ACTUALIZADA PARA AGRUPAR MOBS POR NOMBRE
+local function obtenerMobsAgrupados()
+    local grupos = {}
+
+    for _, instancia in ipairs(workspace.placeFolders.entityManifestCollection:GetChildren()) do
+        if instancia:IsA("BasePart") and table.find(listaDeMobs, instancia.Name) then
+            grupos[instancia.Name] = grupos[instancia.Name] or {}
+            table.insert(grupos[instancia.Name], instancia)
         end
     end
-    return mobs
+
+    return grupos
 end
 
---// DATOS CACHEADOS
-local cachedGUID = nil
+--// CACHE SOLO PARA ID
 local cachedID = nil
-local cachedMobs = {}
 
---// ACTUALIZAR GUID E ID CADA 0.1s
+--// ACTUALIZAR ID
 task.spawn(function()
     while true do
-        local nuevoGUID, nuevoID = getAbilityGUIDAndID()
-        if nuevoGUID and nuevoGUID ~= cachedGUID then
-            cachedGUID = nuevoGUID
+        local nuevoID = getAbilityID()
+        if nuevoID and nuevoID ~= cachedID then
             cachedID = nuevoID
         end
         task.wait(0.1)
     end
 end)
 
---// ACTUALIZAR MOBS CADA 0.1s
-task.spawn(function()
-    while true do
-        cachedMobs = obtenerMobsActuales()
-        task.wait(0.1)
-    end
-end)
-
---// ENVIAR RemoteEvent CADA 0.1s (procesa mobs en lotes de 3, 5 ataques por mob)
+--// NUEVO CICLO DE ATAQUE AGRUPADO POR MOBS
 task.spawn(function()
     while true do
         local success, err = pcall(function()
-            if cachedGUID and cachedID and #cachedMobs > 0 then
-                local remoteEvent = ReplicatedStorage:WaitForChild("network"):WaitForChild("RemoteEvent"):WaitForChild("playerRequest_damageEntity_batch")
+            if cachedID then
+                local gruposDeMobs = obtenerMobsAgrupados()
                 local remoteNames = getRemoteNamesFromID(cachedID)
+                local remoteEvent = ReplicatedStorage:WaitForChild("network"):WaitForChild("RemoteEvent"):WaitForChild("playerRequest_damageEntity_batch")
 
-                for i = 1, #cachedMobs, 5 do
-                    local batch = {}
+                for mobName, grupo in pairs(gruposDeMobs) do
+                    for _, remoteName in ipairs(remoteNames) do
+                        local ataques = {}
+                        local newGUID = HttpService:GenerateGUID(false)
 
-                    for j = i, math.min(i + 2, #cachedMobs) do
-                        local mobPart = cachedMobs[j]
-                        if mobPart then
-                            for _, remoteName in ipairs(remoteNames) do
-                                for _ = 1, 5 do
-                                    table.insert(batch, {
-                                        mobPart,
-                                        mobPart.Position,
-                                        "ability",
-                                        cachedID,
-                                        remoteName,
-                                        cachedGUID
-                                    })
-                                end
-                            end
+                        for _, mob in ipairs(grupo) do
+                            table.insert(ataques, {
+                                mob,
+                                mob.Position,
+                                "ability",
+                                cachedID,
+                                remoteName,
+                                newGUID
+                            })
                         end
-                    end
 
-                    if #batch > 0 then
-                        remoteEvent:FireServer(batch)
-                        print("Lote de ataques enviado. Remote(s):", table.concat(remoteNames, ", "), "| ID:", cachedID)
-                        task.wait(0.5)
+                        remoteEvent:FireServer(ataques)
                     end
                 end
             end
         end)
 
         if not success then
-            warn("Error al enviar RemoteEvent:", err)
+            warn("[Celestial Hub] Error al atacar:", err)
         end
 
-        task.wait(0.5)
+        task.wait(0.1)
     end
 end)
