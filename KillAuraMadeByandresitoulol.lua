@@ -155,6 +155,7 @@ local function getRemoteNamesFromID(id)
             return data.RemoteNames
         end
     end
+    return nil
 end
 
 --// FUNCION ACTUALIZADA PARA AGRUPAR MOBS POR NOMBRE
@@ -178,7 +179,7 @@ local cachedID = nil
 task.spawn(function()
     while true do
         local nuevoID = getAbilityID()
-        if nuevoID and nuevoID ~= cachedID then
+        if nuevoID and nuevoID ~= cachedID and getRemoteNamesFromID(nuevoID) then
             cachedID = nuevoID
         end
         task.wait(0.1)
@@ -192,34 +193,27 @@ task.spawn(function()
             if cachedID then
                 local gruposDeMobs = obtenerMobsAgrupados()
                 local remoteNames = getRemoteNamesFromID(cachedID)
-                local remoteEvent = ReplicatedStorage:WaitForChild("network"):WaitForChild("RemoteEvent"):WaitForChild("playerRequest_damageEntity_batch")
+                
+                -- Verificamos si hay RemoteNames válidos
+                if remoteNames then
+                    local remoteEvent = ReplicatedStorage:WaitForChild("network"):WaitForChild("RemoteEvent"):WaitForChild("playerRequest_damageEntity_batch")
 
-                for mobName, grupo in pairs(gruposDeMobs) do
-                    for _, remoteName in ipairs(remoteNames) do
-                        local ataques = {}
-                        local newGUID = HttpService:GenerateGUID(false)
+                    for mobName, grupo in pairs(gruposDeMobs) do
+                        for _, remoteName in ipairs(remoteNames) do
+                            local ataques = {}
+                            local newGUID = HttpService:GenerateGUID(false)
 
-                        for _, mob in ipairs(grupo) do
-                            table.insert(ataques, {
-                                mob,
-                                mob.Position,
-                                "ability",
-                                cachedID,
-                                remoteName,
-                                newGUID
-                            })
+                            for _, mob in ipairs(grupo) do
+                                table.insert(ataques, {
+                                    mob,
+                                    mob.Position,
+                                    "ability",
+                                    cachedID,
+                                    remoteName,
+                                    newGUID
+                                })
+                            end
+
+                            remoteEvent:FireServer(ataques)
                         end
-
-                        remoteEvent:FireServer(ataques)
                     end
-                end
-            end
-        end)
-
-        if not success then
-            warn("[Celestial Hub] Error al atacar:", err)
-        end
-
-        task.wait(0.1)
-    end
-end)
